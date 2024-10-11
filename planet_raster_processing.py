@@ -328,11 +328,25 @@ def mask_raster(path_raster, path_raster_to_crop, path_out_to_crop):
 # path_out_dod: output path for dod
 # visu: print difference model or not via pyplot
 # returns stats
-def calc_dod (path_raster_1, path_raster_2, path_out_dod, visu = True, year = 2017, output_path_print = None):
+def calc_dod (path_raster_ref, path_raster_src, path_out_dod, path_raster_src_original, path_shape_file, min_elevation = None, max_elevation = None, visu = True, year = 2017, output_path_print = None):
+
+
+    from matplotlib import pyplot as plt
+    from matplotlib.colors import LightSource
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    import rasterio
+    import fiona
+    from shapely.geometry import shape
+    from matplotlib.patches import Polygon
+
+
+
+
+
     
         
      # Calc total area of pixels in dod for statistics
-    with rasterio.open(path_raster_2) as src:
+    with rasterio.open(path_raster_src) as src:
         # Lies die Transformationsmatrix und die Pixelgröße
         transform = src.transform
         pixel_size_x = transform[0]
@@ -349,161 +363,247 @@ def calc_dod (path_raster_1, path_raster_2, path_out_dod, visu = True, year = 20
     
     
     # calc DoD
-    with rasterio.open(path_raster_1) as ras1, \
-        rasterio.open(path_raster_2) as ras2:
+    with rasterio.open(path_raster_ref) as ras1: 
+        with rasterio.open(path_raster_src) as ras2 :
+            with rasterio.open(path_raster_src_original) as ras3:
 
-        overlap_1 = ras1.read(masked=True)
-        overlap_2 = ras2.read(masked=True)
+                overlap_ref = ras1.read(masked=True)
+                overlap_src = ras2.read(masked=True)
+                image = ras3.read(masked=True)
 
-        # create a masked array 
-        overlap_1 = np.ma.masked_invalid(overlap_1)
-        overlap_2 = np.ma.masked_invalid(overlap_2)
+                # create a masked array 
+                overlap_ref = np.ma.masked_invalid(overlap_ref)
+                overlap_src = np.ma.masked_invalid(overlap_src)
 
-        # calc DoD
-        dod = overlap_2 - overlap_1 
-
-     
-
-
-        # exlude outlier by IQR filtering
-        dod = np.ma.filled(dod, np.nan) # arr has shape 1,x,y -> use arr[0] to get x,y format
-        dod = dod[0]
-
-            # save dem
-        with rasterio.open(
-            path_out_dod + "_test.tif", 
-            'w', 
-            driver='GTiff', 
-            height=dod.shape[0], 
-            width=dod.shape[1], 
-            count=1, 
-            dtype=dod.dtype, 
-            transform = ras2.transform,
-            nodata=np.nan
-        ) as dest:
-            dest.write(dod, 1)
-        dest.close()
-
-        dod, percent_filtered = removeOutliers(dod, 3) # k = outlierConstant, use higher values for k to only remove very coarse outlier (std 1.5)      
-
-        # calc some statistics and save as dict 
-        stats = {}
-        stats["area [km²]"] = (total_area/1000000) # area in km²
-        #stats["area"].append(np.ma.count(dod))
-        stats["median [m]"]=(np.nanmedian(dod))
-        stats["mean [m]"]=(np.nanmean(dod))	
-        stats["max [m]"]=(np.nanmax(dod))	
-        stats["min [m]"]=(np.nanmin(dod))	
-        stats["std [m]"]=(np.nanstd(dod))	
-        stats["mad [m]"]=(np.nanmedian(np.absolute(dod - np.nanmedian(dod))))	# Median absolute deviation
-        if percent_filtered:
-            stats["filt [%]"]=(percent_filtered)
-
-        if visu:
-            
-            #add_subplot "234" means "2x3 grid, 4th subplot"
-            #fig = plt.figure(figsize=(20, 10))
-            fig = plt.figure(figsize=(8, 6))
-            gs = fig.add_gridspec(3, 2)
-
-            ax1 = fig.add_subplot(gs[0,1])
-            im1 = ax1.imshow(overlap_1[0], vmin=np.nanmin(overlap_2[0]), vmax=np.nanmax(overlap_2[0]), cmap = cmap_terrain, interpolation='None')
-            divider = make_axes_locatable(ax1)
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(im1, cax=cax, orientation='vertical')
-
-            ax2 = fig.add_subplot(gs[1,1])
-            im2 = ax2.imshow(overlap_2[0], vmin=np.nanmin(overlap_2[0]), vmax=np.nanmax(overlap_2[0]), cmap = cmap_terrain, interpolation='None')
-            divider = make_axes_locatable(ax2)
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(im2, cax=cax, orientation='vertical')
+                # calc DoD
+                dod = overlap_src - overlap_ref 
 
             
-            # get boundaries for colormap and hist
-            limiter = (int) (abs(np.nanmin(dod)-10) if abs(np.nanmin(dod)-10) > abs(np.nanmax(dod)+10) else abs(np.nanmax(dod)+10))
-            norm_dod = TwoSlopeNorm(vmin = -limiter, vcenter=0, vmax=limiter)
-            ax3 = fig.add_subplot(gs[2,1])
-            im3 = ax3.imshow(dod, norm = norm_dod, cmap = 'RdBu_r', interpolation='none')
-            divider = make_axes_locatable(ax3)
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(im3, cax=cax, orientation='vertical')
-
-        
-            ax4 = fig.add_subplot(gs[:,0])
-            im4 = ax4.hist(dod.flatten(), bins = 34, range=[-limiter, limiter], color = 'blue', edgecolor = 'w', alpha = .8)
-            # add text annotations
-            line_shifter = 0
-            for attribute, value in stats.items():
-                im4 = ax4.annotate( '{} : {:.2f}'.format(attribute, value), xy=(.05,.9-line_shifter), xycoords="axes fraction", fontsize = 8, bbox = dict(boxstyle ="round", alpha = 0.5, facecolor = 'white')) 
-                line_shifter = line_shifter + 0.035
-               
 
 
-            ax1.title.set_text('Reference DEM')
-            ax2.title.set_text('Planetscope DEM')
-            ax3.title.set_text('DoD (Planetscope - Reference)')
-            ax4.title.set_text(year + ' - DoD Histogram') if year else  ax1.title.set_text('DoD Histogram')
+                # exlude outlier by IQR filtering
+                dod = np.ma.filled(dod, np.nan) # arr has shape 1,x,y -> use arr[0] to get x,y format
+                dod = dod[0]
+
+                    # save dem
+                with rasterio.open(
+                    path_out_dod + "_test.tif", 
+                    'w', 
+                    driver='GTiff', 
+                    height=dod.shape[0], 
+                    width=dod.shape[1], 
+                    count=1, 
+                    dtype=dod.dtype, 
+                    transform = ras2.transform,
+                    nodata=np.nan
+                ) as dest:
+                    dest.write(dod, 1)
+                dest.close()
+
+                dod, percent_filtered = removeOutliers(dod, 3) # k = outlierConstant, use higher values for k to only remove very coarse outlier (std 1.5)      
+
+                # calc some statistics and save as dict 
+                stats = {}
+                stats["area [km²]"] = (total_area/1000000) # area in km²
+                #stats["area"].append(np.ma.count(dod))
+                stats["median [m]"]=(np.nanmedian(dod))
+                stats["mean [m]"]=(np.nanmean(dod))	
+                stats["max [m]"]=(np.nanmax(dod))	
+                stats["min [m]"]=(np.nanmin(dod))	
+                stats["std [m]"]=(np.nanstd(dod))	
+                stats["mad [m]"]=(np.nanmedian(np.absolute(dod - np.nanmedian(dod))))	# Median absolute deviation
+                if percent_filtered:
+                    stats["filt [%]"]=(percent_filtered)
+
+                if visu:
+
+                     # Compute hillshade
+                    ls = LightSource(azdeg=315, altdeg=45)
+                    hillshade = ls.hillshade(image[0], vert_exag=1, dx=1, dy=1)
+                    limiter = (int) (abs(np.nanmin(dod)-10) if abs(np.nanmin(dod)-10) > abs(np.nanmax(dod)+10) else abs(np.nanmax(dod)+10))
+                    norm_dod = TwoSlopeNorm(vmin = -limiter, vcenter=0, vmax=limiter)
+                    
+                    fig = plt.figure(figsize=(10, 6))
+
+                    
+                    gs = fig.add_gridspec(2, 2, width_ratios=[1, 1.0], height_ratios = [2.5, 1] )  # Gleichmäßige Verhältnisse schaffen Breite und Höhe
+                    ax4 = fig.add_subplot(gs[:,0]) #:,0 # ax4 nimmt den gesamten Platz links ein (über beide Reihen)
+                    im4 = ax4.hist(dod.flatten(), bins = 34, range=[-limiter, limiter], color = 'blue', edgecolor = 'w', alpha = .8)
+                    # add text annotations
+                    line_shifter = 0
+                    for attribute, value in stats.items():
+                        im4 = ax4.annotate( '{} : {:.2f}'.format(attribute, value), xy=(.05,.9-line_shifter), xycoords="axes fraction", fontsize = 8, bbox = dict(boxstyle ="round", alpha = 0.5, facecolor = 'white')) 
+                        line_shifter = line_shifter + 0.035
+                    
+
+                    # Plot the hillshade with transparency
+                    #ax1 = fig.add_subplot(111)
+                    ax1 = fig.add_subplot(gs[0,1]) #0,1 # ax1 nimmt den gesamten Platz oben rechts
+                    ax1.imshow(hillshade, cmap='gray', alpha=0.5, aspect="equal")  # Hillshade with transparency        
+                    im1 = ax1.imshow(image[0], cmap=cmap_terrain, interpolation='none', alpha=0.7, aspect="equal") # Overlay the DEM with transparency
+                    if None not in (min_elevation, max_elevation):
+                        im1.set_clim(min_elevation, max_elevation)
+                    # Add colorbar
+                    divider = make_axes_locatable(ax1)
+                    cax = divider.append_axes('right', size='5%', pad=0.05)
+                    cbar = fig.colorbar(im1, cax=cax, orientation='vertical')
+                    #cbar.set_label('Elevation [m]', rotation=90)
+                    # Set title
+                    ax1.title.set_text(year + ' - Planetscope DEM') if year else ax1.title.set_text('Planetscope DEM')
+                    ax1.title.set_size(10)
+                    # Load shapefile and extract polygons
+                    if path_shape_file is not None:
+                        with fiona.open(path_shape_file, 'r') as shapefile:
+                            for feature in shapefile:
+                                geom = shape(feature['geometry'])
+                                # Convert the polygon coordinates to pixel coordinates
+                                polygon_coords = [~ras3.transform * (x, y) for x, y in geom.exterior.coords]
+                                # Draw the polygon fill with transparency
+                                fill_polygon = Polygon(polygon_coords, closed=True, facecolor='lightblue', alpha=0.3, edgecolor='none')
+                                ax1.add_patch(fill_polygon)
+                                # Draw the polygon outline without transparency
+                                outline_polygon = Polygon(polygon_coords, closed=True, edgecolor='cornflowerblue', fill=False, linewidth=1, antialiased=True)
+                                ax1.add_patch(outline_polygon)
+                        shapefile.close()
+                    else:
+                        print("no shape file given")
+
+                
+                    
+                    # get boundaries for colormap and hist
+                    ax3 = fig.add_subplot(gs[1,1]) #1,1 # ax3 nimmt den gesamten Platz unten rechts
+                    im3 = ax3.imshow(dod, norm = norm_dod, cmap = 'RdBu_r', interpolation='none', aspect = 'auto')
+                    
+                    
+                   
+
+                    divider = make_axes_locatable(ax3)
+                    cax = divider.append_axes('right', size='5%', pad=0.05)
+                    fig.colorbar(im3, cax=cax, orientation='vertical')
+  
+
+                    ax1.title.set_text('Planetscope DEM')
+                    ax3.title.set_text('DoD (Planetscope - Reference)')
+                    ax4.title.set_text(year + ' - DoD Histogram') if year else  ax1.title.set_text('DoD Histogram')
+
+                    ax1.title.set_size(10)
+                    ax3.title.set_size(10)
+                    ax4.title.set_size(10)
 
 
-            
-            ax1.title.set_size(10)
-            ax2.title.set_size(10)
-            ax3.title.set_size(10)
-            ax4.title.set_size(10)
+                    legend1 = ax1.legend(title='Elevation [m]', loc="lower right", frameon=True)
+                    legend3 = ax3.legend(title='Height Differences [m]', loc="lower right", frameon=True)
+
+                    legend1._legend_box.sep = -5
+                    legend3._legend_box.sep = -5
+
+                    plt.tight_layout()
 
 
-            legend1 = ax1.legend(title='Elevation [m]', loc="lower right", frameon=False)
-            legend2 = ax2.legend(title='Elevation [m]', loc="lower right", frameon=False)
-            legend3 = ax3.legend(title='Height Differences [m]', loc="lower right", frameon=False)
 
-            legend1._legend_box.sep = -5
-            legend2._legend_box.sep = -5
-            legend3._legend_box.sep = -5
-
-        
-            plt.tight_layout()
-
-
-            if output_path_print is not None:
-                plt.savefig(output_path_print, dpi=300, bbox_inches='tight')
-            plt.close()
+                    if output_path_print is not None:
+                        plt.savefig(output_path_print, dpi=300, bbox_inches='tight')
+                    plt.close()
 
 
 
 
-        # save dem
-        with rasterio.open(
-            path_out_dod, 
-            'w', 
-            driver='GTiff', 
-            height=dod.shape[0], 
-            width=dod.shape[1], 
-            count=1, 
-            dtype=dod.dtype, 
-            transform = ras2.transform,
-            nodata=np.nan
-        ) as dest:
-            dest.write(dod, 1)
-    dest.close()
-    ras1.close()
-    ras2.close()
+                # save dem
+                with rasterio.open(
+                    path_out_dod, 
+                    'w', 
+                    driver='GTiff', 
+                    height=dod.shape[0], 
+                    width=dod.shape[1], 
+                    count=1, 
+                    dtype=dod.dtype, 
+                    transform = ras2.transform,
+                    nodata=np.nan
+                ) as dest:
+                    dest.write(dod, 1)
+            dest.close()
+            ras1.close()
+            ras2.close()
 
 
 
     return stats, dod[0]
 
 
-def print_dem(path_dem_file, output_path_dem_print=None, min_elevation = None, max_elevation = None, year = None):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# def print_dem(path_dem_file, output_path_dem_print=None, min_elevation = None, max_elevation = None, year = None):
+#     from matplotlib import pyplot as plt
+#     from matplotlib.colors import LightSource
+#     from mpl_toolkits.axes_grid1 import make_axes_locatable
+#     import rasterio
+
+#     # Load DEM data
+#     with rasterio.open(path_dem_file) as ras1:
+#         fig = plt.figure(figsize=(8, 6))
+#         image = ras1.read(masked=True)
+        
+#         # Compute hillshade
+#         ls = LightSource(azdeg=315, altdeg=45)
+#         hillshade = ls.hillshade(image[0], vert_exag=1, dx=1, dy=1)
+
+#         # Plot the hillshade with transparency
+#         ax1 = fig.add_subplot(111)
+#         ax1.imshow(hillshade, cmap='gray', alpha=0.5)  # Hillshade with transparency
+        
+#         # Overlay the DEM with transparency
+#         im1 = ax1.imshow(image[0], cmap=cmap_terrain, interpolation='none', alpha=0.7)
+        
+#         if None not in (min_elevation, max_elevation):
+#             im1.set_clim(min_elevation,max_elevation)
+        
+#         # Add colorbar
+#         divider = make_axes_locatable(ax1)
+#         cax = divider.append_axes('right', size='5%', pad=0.05)
+#         cbar = fig.colorbar(im1, cax=cax, orientation='vertical')
+#         cbar.set_label('Elevation [m]', rotation=90)
+
+#         # Set title        
+#         ax1.title.set_text(year + ' - Planetscope DEM') if year else  ax1.title.set_text('Planetscope DEM')
+#         ax1.title.set_size(10)
+
+#         # Save the figure if output path is specified
+#         if output_path_dem_print is not None:
+#             plt.savefig(output_path_dem_print, dpi=300, bbox_inches='tight')
+        
+#         plt.close()
+
+#     ras1.close()
+
+def print_dem(path_dem_file, output_path_dem_print=None, min_elevation=None, max_elevation=None, year=None, path_shape_file=None):
     from matplotlib import pyplot as plt
     from matplotlib.colors import LightSource
     from mpl_toolkits.axes_grid1 import make_axes_locatable
     import rasterio
+    import fiona
+    from shapely.geometry import shape
+    from matplotlib.patches import Polygon
 
     # Load DEM data
     with rasterio.open(path_dem_file) as ras1:
         fig = plt.figure(figsize=(8, 6))
         image = ras1.read(masked=True)
-        
+
         # Compute hillshade
         ls = LightSource(azdeg=315, altdeg=45)
         hillshade = ls.hillshade(image[0], vert_exag=1, dx=1, dy=1)
@@ -511,29 +611,44 @@ def print_dem(path_dem_file, output_path_dem_print=None, min_elevation = None, m
         # Plot the hillshade with transparency
         ax1 = fig.add_subplot(111)
         ax1.imshow(hillshade, cmap='gray', alpha=0.5)  # Hillshade with transparency
-        
+
         # Overlay the DEM with transparency
         im1 = ax1.imshow(image[0], cmap=cmap_terrain, interpolation='none', alpha=0.7)
-        
+
         if None not in (min_elevation, max_elevation):
-            im1.set_clim(min_elevation,max_elevation)
-        
+            im1.set_clim(min_elevation, max_elevation)
+
         # Add colorbar
         divider = make_axes_locatable(ax1)
         cax = divider.append_axes('right', size='5%', pad=0.05)
         cbar = fig.colorbar(im1, cax=cax, orientation='vertical')
         cbar.set_label('Elevation [m]', rotation=90)
 
-        # Set title        
-        ax1.title.set_text(year + ' - Planetscope DEM') if year else  ax1.title.set_text('Planetscope DEM')
+        # Set title
+        ax1.title.set_text(year + ' - Planetscope DEM') if year else ax1.title.set_text('Planetscope DEM')
         ax1.title.set_size(10)
+
+        # Load shapefile and extract polygons
+        if path_shape_file is not None:
+            with fiona.open(path_shape_file, 'r') as shapefile:
+                for feature in shapefile:
+                    geom = shape(feature['geometry'])
+
+                    # Convert the polygon coordinates to pixel coordinates
+                    polygon_coords = [~ras1.transform * (x, y) for x, y in geom.exterior.coords]
+
+                   # Draw the polygon fill with transparency
+                    fill_polygon = Polygon(polygon_coords, closed=True, facecolor='lightblue', alpha=0.3, edgecolor='none')
+                    ax1.add_patch(fill_polygon)
+
+                    # Draw the polygon outline without transparency
+                    outline_polygon = Polygon(polygon_coords, closed=True, edgecolor='cornflowerblue', fill=False, linewidth=1, antialiased=True)
+                    ax1.add_patch(outline_polygon)
 
         # Save the figure if output path is specified
         if output_path_dem_print is not None:
             plt.savefig(output_path_dem_print, dpi=300, bbox_inches='tight')
-        
+
         plt.close()
 
     ras1.close()
-
-
