@@ -11,7 +11,7 @@ import psutil
 n_cpu = psutil.cpu_count(logical=False)
 
 # Planet4Stereo modules
-from scripts import planet_raster_processing as rproc
+import planet_raster_processing as rproc
 
 
 from demcoreg import dem_align
