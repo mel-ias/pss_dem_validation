@@ -12,7 +12,6 @@ python -m pip install git+https://github.com/dshean/demcoreg.git
 python -m pip install git+https://github.com/dshean/imview.git
 Requires some reworking of PATH and ability to call scripts.
  ```
-
 Benötigt Funktionen aus dem Conda Environment von planet4stereo (installiere demcoreg wie o.g. in das Environment rein wenn nicht schon geschehen)
 
 #Todo: RPCM Funktion aus planet4stereo hierein schieben
