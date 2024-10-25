@@ -1,5 +1,4 @@
-import fiona
-from fiona.transform import transform_geom
+import os
 from pyproj import Transformer
 import rasterio
 from rasterio import features
@@ -7,18 +6,19 @@ from rasterio.mask import mask
 from rasterio.enums import Resampling
 from rasterio.merge import merge
 import geopandas as gpd
-from shapely.geometry import box
+from shapely.geometry import box, shape
+import fiona
 from fiona import collection
+from fiona.transform import transform_geom
 from fiona.crs import from_epsg
-
-import os
 from matplotlib import pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
 import numpy as np
-
 from scipy.interpolate import griddata
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.colors as colors
+from matplotlib.colors import LightSource
+from matplotlib.patches import Polygon
 
 # adapt color scale from matplotlib removing blue (green to lightyellow to brown) 
 def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
@@ -331,13 +331,7 @@ def mask_raster(path_raster, path_raster_to_crop, path_out_to_crop):
 def calc_dod (path_raster_ref, path_raster_src, path_out_dod, path_raster_src_original, path_shape_file, min_elevation = None, max_elevation = None, visu = True, year = 2017, output_path_print = None):
 
 
-    from matplotlib import pyplot as plt
-    from matplotlib.colors import LightSource
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
-    import rasterio
-    import fiona
-    from shapely.geometry import shape
-    from matplotlib.patches import Polygon
+   
 
 
 
