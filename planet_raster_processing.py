@@ -420,7 +420,7 @@ def calc_dod (path_raster_ref, path_raster_src, path_out_dod, path_raster_src_or
                     fig = plt.figure(figsize=(10, 6))
 
                     
-                    gs = fig.add_gridspec(2, 2, width_ratios=[1, 1.0], height_ratios = [2.5, 1] )  # Gleichmäßige Verhältnisse schaffen Breite und Höhe
+                    gs = fig.add_gridspec(2, 2, width_ratios=[1, 1], height_ratios = [1, 1] ) #Shisper: 2.5,1 bei Height Ratio # Gleichmäßige Verhältnisse schaffen Breite und Höhe
                     ax4 = fig.add_subplot(gs[:,0]) #:,0 # ax4 nimmt den gesamten Platz links ein (über beide Reihen)
                     im4 = ax4.hist(dod.flatten(), bins = 34, range=[-limiter, limiter], color = 'blue', edgecolor = 'w', alpha = .8)
                     # add text annotations
@@ -471,9 +471,18 @@ def calc_dod (path_raster_ref, path_raster_src, path_out_dod, path_raster_src_or
                     
                    
 
-                    divider = make_axes_locatable(ax3)
-                    cax = divider.append_axes('right', size='5%', pad=0.05)
-                    fig.colorbar(im3, cax=cax, orientation='vertical')
+                    # Für den oberen rechten Plot (ax1)
+                    divider1 = make_axes_locatable(ax1)
+                    cax1 = divider1.append_axes('right', size='5%', pad=0.05)
+                    fig.colorbar(im1, cax=cax1, orientation='vertical')
+
+                    # Für den unteren rechten Plot (ax3)
+                    divider3 = make_axes_locatable(ax3)
+                    cax3 = divider3.append_axes('right', size='5%', pad=0.05)
+                    fig.colorbar(im3, cax=cax3, orientation='vertical')
+
+                    ax1.set_aspect('equal', adjustable='datalim')
+                    ax3.set_aspect('equal', adjustable='datalim')
   
 
                     ax1.title.set_text('Planetscope DEM')
