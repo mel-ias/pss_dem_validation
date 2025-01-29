@@ -1,17 +1,24 @@
-# p4s_change_detection
-Runs change detection and statistics using demcoreg
+# **p4s_change_detection**  
 
+A lightweight toolchain for validating results from [Planet4Stereo](https://github.com/mel-ias/planet4stereo) using [demcoreg](https://github.com/dshean/demcoreg) (*Shean et al., 2016*).  
 
-Privates Repo um Veränderungserkennung und Genauigkeitsanalysen mittels DEMs durchzuführen. 
-Verwendet DEMCOREG von Shean et al. (2016), Install-Anleitung:
+## **Setup Instructions**  
 
-Install pygeotools and demcoreg from latest github source:
+### **1. Set up the Planet4Stereo Conda Environment**  
+Ensure that the Planet4Stereo Conda environment is correctly installed and activated before proceeding.  
+
+### **2. Install Required Dependencies**  
+Install `pygeotools`, `demcoreg`, and `imview` from their latest GitHub sources:  
+
 ```
 python -m pip install git+https://github.com/dshean/pygeotools.git
 python -m pip install git+https://github.com/dshean/demcoreg.git
 python -m pip install git+https://github.com/dshean/imview.git
-Requires some reworking of PATH and ability to call scripts.
- ```
-Benötigt Funktionen aus dem Conda Environment von planet4stereo (installiere demcoreg wie o.g. in das Environment rein wenn nicht schon geschehen). 
+```  
 
-#Todo: RPCM Funktion aus planet4stereo hierein schieben
+### **3. Run the Validation Script**  
+Execute `validation.py` with the appropriate arguments as specified in the argument section of the script. To view available parameters and their descriptions, run:  
+
+```
+python validation.py -h
+```  
